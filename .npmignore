@@ -1,0 +1,34 @@
+# Development files
+.git
+.github
+.editorconfig
+.eslintrc
+.prettierrc
+.idea
+.vscode
+*.log
+*.swp
+*~
+
+.node_modules
+node_modules
+# Source control
+.gitignore
+.gitattributes
+
+# Build scripts
+webpack.config.js
+rollup.config.js
+babel.config.js
+
+# Test files
+test
+tests
+__tests__
+coverage
+.nyc_output
+
+# Documentation
+docs
+
+.env
