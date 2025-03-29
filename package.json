@@ -1,13 +1,13 @@
 {
   "name": "filezap",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Cross-Platform File Distribution Tool for seamless file sharing",
   "main": "index.js",
   "bin": {
-    "filezap": "./bin/cpd.js" 
+    "filezap": "./bin/cpd.js"
   },
   "type": "module",
-  "preferGlobal": true, 
+  "preferGlobal": true,
   "scripts": {
     "start": "node ./bin/cpd.js"
   },
