@@ -1,6 +1,6 @@
 {
   "name": "filezap",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Cross-Platform File Distribution Tool for seamless file sharing",
   "main": "index.js",
   "bin": {
