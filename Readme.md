@@ -1,8 +1,16 @@
 # FileZap
 
-<p align="center">
-  <img src="docs/images/filezap-logo.png" alt="FileZap Logo" width="150">
-</p>
+<!-- ASCII Logo for NPM compatibility -->
+```
+  ______ _ _      _____            
+ |  ____(_) |    |___  |           
+ | |__   _| | ___   / /  __ _ _ __ 
+ |  __| | | |/ _ \ / /  / _` | '_ \
+ | |    | | |  __// /__| (_| | |_) |
+ |_|    |_|_|\___/_____|__,_| .__/ 
+                            | |    
+                            |_|    
+```
 
 <p align="center">
   <strong>Blazingly Fast Cross-Platform File Sharing Tool</strong>
@@ -392,9 +400,40 @@ filezap ngrok-fix
 filezap list
 ```
 
+## Project Structure
+
+If contributing to FileZap, you should be familiar with the project structure:
+
+```
+filezap/
+├── bin/                  # Executable entry points
+│   ├── cpd.js            # Legacy entry point
+│   └── filezap.js        # Main entry point with keyboard shortcuts
+├── commander/            # Command modules
+│   ├── commands.js       # Command definitions
+│   └── utils/            # Command utilities
+├── src/                  # Core functionality
+│   ├── client.js         # File receiver
+│   └── server.js         # File sharing server
+├── utils/                # Shared utilities
+│   ├── logger.js         # Logging functionality
+│   ├── ngrokDiagnostics.js # Tunnel diagnostics
+│   └── tunnelProviders.js  # Tunnel management
+└── README.md             # This documentation
+```
+
 ---
 
+## Contributing
 
+Contributions are welcome! To contribute:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'Add some amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
 ## License
 
@@ -403,5 +442,5 @@ filezap list
 ---
 
 <p align="center">
-  Made with ❤️ by the VanshCodeWorks
+  Made with ❤️ by the FileZap Team
 </p>
