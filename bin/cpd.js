@@ -1,3 +1,4 @@
 #!/usr/bin/env node
 
-import '../commander/commands.js';
+// Import the new filezap.js instead of commands.js directly
+import '../bin/filezap.js';

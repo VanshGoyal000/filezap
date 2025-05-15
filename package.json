@@ -1,35 +1,29 @@
 {
   "name": "filezap",
-  "version": "1.0.2",
-  "description": "Cross-Platform File Distribution Tool for seamless file sharing",
-  "main": "index.js",
-  "bin": {
-    "filezap": "./bin/cpd.js"
-  },
+  "version": "1.0.0",
+  "description": "Fast and secure file sharing across devices and networks",
   "type": "module",
-  "preferGlobal": true,
-  "scripts": {
-    "start": "node ./bin/cpd.js"
+  "main": "./bin/filezap.js",
+  "bin": {
+    "filezap": "./bin/filezap.js"
   },
-  "keywords": [
-    "file-sharing",
-    "cli",
-    "network",
-    "cross-platform"
-  ],
-  "author": "Vansh Goyal , vanshgoyal9528@gmail.com",
-  "license": "ISC",
+  "scripts": {
+    "start": "node ./bin/filezap.js"
+  },
   "dependencies": {
-    "chalk": "^5.4.1",
-    "commander": "^13.1.0",
-    "crypto-js": "^4.2.0",
-    "fs-extra": "^11.3.0",
-    "get-port": "^7.1.0",
-    "inquirer": "^12.5.0",
-    "ip": "^2.0.1",
-    "ora": "^5.4.1",
+    "axios": "^1.6.0",
+    "boxen": "^7.1.1",
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "crypto-js": "^4.1.1",
+    "fs-extra": "^11.1.1",
+    "get-port": "^7.0.0",
+    "gradient-string": "^2.0.2",
+    "ip": "^1.1.8",
+    "ngrok": "^5.0.0-beta.2",
+    "ora": "^7.0.1",
     "qrcode-terminal": "^0.12.0",
-    "universalify": "^2.0.1",
-    "ws": "^8.18.1"
-  }
+    "ws": "^8.14.1"
+  },
+  "license": "MIT"
 }

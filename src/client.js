@@ -4,10 +4,44 @@ import path from 'path';
 import os from 'os';
 import ora from 'ora';
 import chalk from 'chalk';
+import axios from 'axios';
+import readline from 'readline';
 
-const CONFIG_DIR = path.join(os.homedir(), '.cpd');
+// Fix the inconsistent directory path (.cpd to .filezap)
+const CONFIG_DIR = path.join(os.homedir(), '.filezap');
 
-export async function receiveFile(serverIp, serverPort, fileName) {
+// Function to resolve shortened URLs
+async function resolveUrl(url) {
+  try {
+    const response = await axios.get(url, {
+      maxRedirects: 0,
+      validateStatus: status => status >= 200 && status < 400
+    });
+    return url; // URL is not redirecting, it's the final URL
+  } catch (error) {
+    if (error.response && error.response.headers.location) {
+      return error.response.headers.location;
+    }
+    return url; // If can't resolve, return original
+  }
+}
+
+// Function to prompt for password if needed
+async function promptForPassword() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  
+  return new Promise((resolve) => {
+    rl.question('Enter password to access file: ', (password) => {
+      rl.close();
+      resolve(password);
+    });
+  });
+}
+
+export async function receiveFile(serverIp, serverPort, fileName, password = null) {
   const spinner = ora(`Connecting to file server at ${serverIp}:${serverPort}...`).start();
   
   try {
@@ -28,8 +62,28 @@ export async function receiveFile(serverIp, serverPort, fileName) {
       counter++;
     }
     
+    // If URL is shortened, try to resolve it
+    if (serverIp.startsWith('http://tinyurl.com/') || 
+        serverIp.startsWith('https://tinyurl.com/') ||
+        serverIp.includes('bit.ly')) {
+      spinner.text = 'Resolving shortened URL...';
+      serverIp = await resolveUrl(serverIp);
+    }
+    
+    // Figure out if we're connecting to a local or ngrok URL
+    let wsUrl;
+    if (serverIp.startsWith('http://') || serverIp.startsWith('https://')) {
+      // Convert HTTP URL to WebSocket URL
+      const url = new URL(serverIp);
+      wsUrl = `ws://${url.hostname}:${serverPort}`;
+      spinner.text = `Connecting to remote server via tunnel...`;
+    } else {
+      // Standard connection
+      wsUrl = `ws://${serverIp}:${serverPort}`;
+    }
+    
     // Connect to WebSocket server
-    const ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
+    const ws = new WebSocket(wsUrl);
     
     // Set a connection timeout
     const connectionTimeout = setTimeout(() => {
@@ -42,8 +96,12 @@ export async function receiveFile(serverIp, serverPort, fileName) {
       clearTimeout(connectionTimeout);
       spinner.text = 'Connected to server. Waiting for file...';
       
-      // After connection, send ready message
-      ws.send(JSON.stringify({ type: 'ready', clientName: os.hostname() }));
+      // After connection, send ready message with password if provided
+      ws.send(JSON.stringify({ 
+        type: 'ready', 
+        clientName: os.hostname(),
+        password: password // Include password if provided
+      }));
     });
     
     // Track download progress
@@ -51,7 +109,7 @@ export async function receiveFile(serverIp, serverPort, fileName) {
     let receivedSize = 0;
     let fileStartTime = 0;
     
-    ws.on('message', (data) => {
+    ws.on('message', async (data) => {
       // Check if this is a metadata message
       try {
         const message = JSON.parse(data.toString());
@@ -60,6 +118,29 @@ export async function receiveFile(serverIp, serverPort, fileName) {
           totalSize = message.fileSize;
           fileStartTime = Date.now();
           spinner.text = `Receiving: ${message.fileName} (${(message.fileSize / 1024).toFixed(2)} KB)`;
+          return;
+        }
+        
+        // Handle error messages (like password failures)
+        if (message.type === 'error') {
+          spinner.fail(`Error: ${message.message}`);
+          
+          // If it's a password error, prompt for password
+          if (message.message === 'Invalid password') {
+            console.log(chalk.yellow('\nThe file is password protected.'));
+            
+            // Prompt for password
+            const enteredPassword = await promptForPassword();
+            
+            // Try reconnecting with the password
+            console.log('Reconnecting with password...');
+            ws.close();
+            setTimeout(() => {
+              receiveFile(serverIp, serverPort, fileName, enteredPassword);
+            }, 1000);
+          } else {
+            process.exit(1);
+          }
           return;
         }
         
@@ -117,6 +198,8 @@ export async function receiveFile(serverIp, serverPort, fileName) {
       console.log('1. Make sure both devices are on the same network');
       console.log('2. Try another IP address if multiple were provided');
       console.log('3. Check if firewalls are blocking the connection');
+      console.log('4. If using a shortened URL, it might have expired');
+      console.log('5. Try using the full ngrok URL if available');
       process.exit(1);
     });
     

@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 
 // Common constants (should match generateKey.js)
-const CONFIG_DIR = path.join(os.homedir(), '.cpd');
+const CONFIG_DIR = path.join(os.homedir(), '.filezap');
 const KEY_FILE = path.join(CONFIG_DIR, 'keys.json');
 
 export function copyCmd(filepath, userKey) {

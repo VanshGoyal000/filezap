@@ -4,7 +4,7 @@ import fs from 'fs-extra'
 import CryptoJS from 'crypto-js';
 import path from 'path';
 
-const CONFIG_DIR = path.join(os.homedir(), '.cpd');
+const CONFIG_DIR = path.join(os.homedir(), '.filezap');
 const KEY_FILE = path.join(CONFIG_DIR, 'keys.json');  
 
 fs.ensureDirSync(CONFIG_DIR);

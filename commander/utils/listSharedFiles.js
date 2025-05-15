@@ -3,7 +3,8 @@ import path from 'path';
 import os from 'os';
 import ora from 'ora';
 
-const CONFIG_DIR = path.join(os.homedir(), '.cpd');
+// Fix the inconsistent directory path (.filezap to .filezap)
+const CONFIG_DIR = path.join(os.homedir(), '.filezap');
 
 export function listSharedFiles() {
   const spinner = ora('Looking for shared files...').start();
