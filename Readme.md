@@ -394,9 +394,7 @@ filezap list
 
 ---
 
-## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
@@ -405,5 +403,5 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 ---
 
 <p align="center">
-  Made with ❤️ by the FileZap Team
+  Made with ❤️ by the VanshCodeWorks
 </p>
