@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 import ora from 'ora';
 import chalk from 'chalk';
 
-// Path to the installed CPD binary
+// Improved path to the installed FileZap binary
 const getExecutablePath = () => {
   // On Windows, use the installed location or the current file location
   if (os.platform() === 'win32') {
@@ -26,8 +26,45 @@ const getExecutablePath = () => {
     return path.join(currentDir, 'bin', 'cpd.js');
   }
   
-  // On macOS and Linux, we expect it to be in the PATH
-  return 'cpd';
+  // On macOS, be more specific about where to find the executable
+  if (os.platform() === 'darwin') {
+    try {
+      // Check for global npm installs
+      const npmGlobal = execSync('npm root -g').toString().trim();
+      const possiblePath = path.join(npmGlobal, '..', 'bin', 'filezap');
+      if (fs.existsSync(possiblePath)) {
+        return possiblePath;
+      }
+    } catch (e) {
+      // Ignore error if npm not found
+    }
+    
+    // Try checking in standard paths
+    const standardPaths = [
+      '/usr/local/bin/filezap',
+      '/usr/bin/filezap',
+      path.join(os.homedir(), '.npm-global', 'bin', 'filezap')
+    ];
+    
+    for (const stdPath of standardPaths) {
+      if (fs.existsSync(stdPath)) {
+        return stdPath;
+      }
+    }
+    
+    // Last resort: use which command
+    try {
+      const whichPath = execSync('which filezap').toString().trim();
+      if (whichPath) {
+        return whichPath;
+      }
+    } catch (e) {
+      // Command not found
+    }
+  }
+  
+  // On Linux or as a fallback, we expect it to be in the PATH
+  return 'filezap';
 };
 
 // Windows implementation using registry
@@ -104,31 +141,61 @@ const windowsIntegration = {
   }
 };
 
-// macOS implementation using Automator Service
+// Completely rewritten macOS implementation using Automator Service
 const macosIntegration = {
   install: async () => {
     const spinner = ora('Adding macOS Finder context menu integration...').start();
     
     try {
-      const filezapPath = getExecutablePath(); // Changed from cpdPath to filezapPath for consistency
+      // Get the path to the executable with better error handling
+      let filezapPath = getExecutablePath();
+      spinner.text = `Using FileZap at: ${filezapPath}`;
+      
+      // Check if the path exists and is executable
+      try {
+        const stats = fs.statSync(filezapPath);
+        if (!stats.isFile()) {
+          spinner.warn(`FileZap not found at ${filezapPath}, using PATH reference`);
+          filezapPath = 'filezap'; // Fallback to PATH
+        }
+      } catch (e) {
+        spinner.warn(`FileZap not found at ${filezapPath}, using PATH reference`);
+        filezapPath = 'filezap'; // Fallback to PATH
+      }
+      
       const servicesDir = path.join(os.homedir(), 'Library', 'Services');
       fs.ensureDirSync(servicesDir);
       
       // Create the workflow directory
       const workflowName = 'Share via FileZap.workflow';
       const workflowDir = path.join(servicesDir, workflowName);
-      const contentsDir = path.join(workflowDir, 'Contents');
-      const infoDir = path.join(contentsDir, 'Info.plist');
-      const documentDir = path.join(contentsDir, 'document.wflow');
       
+      // Remove any existing damaged workflow
+      if (fs.existsSync(workflowDir)) {
+        spinner.text = 'Removing existing workflow...';
+        fs.removeSync(workflowDir);
+      }
+      
+      const contentsDir = path.join(workflowDir, 'Contents');
       fs.ensureDirSync(workflowDir);
       fs.ensureDirSync(contentsDir);
       
-      // Create Info.plist
+      // Paths to required files
+      const infoPath = path.join(contentsDir, 'Info.plist');
+      const documentPath = path.join(contentsDir, 'document.wflow');
+      
+      // Create Info.plist with more precise configuration
+      spinner.text = 'Creating Info.plist...';
       const infoPlist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>AMApplicationBuild</key>
+    <string>521.1</string>
+    <key>AMApplicationVersion</key>
+    <string>2.10</string>
+    <key>AMDocumentVersion</key>
+    <string>2</string>
     <key>NSServices</key>
     <array>
         <dict>
@@ -153,13 +220,14 @@ const macosIntegration = {
 </dict>
 </plist>`;
 
-      // Create document.wflow that uses the correct filezapPath variable
+      // Create a simpler and more robust document.wflow file
+      spinner.text = 'Creating workflow...';
       const documentWflow = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>AMApplicationBuild</key>
-    <string>523</string>
+    <string>521.1</string>
     <key>AMApplicationVersion</key>
     <string>2.10</string>
     <key>AMDocumentVersion</key>
@@ -177,7 +245,7 @@ const macosIntegration = {
                     <true/>
                     <key>Types</key>
                     <array>
-                        <string>com.apple.cocoa.string</string>
+                        <string>com.apple.cocoa.path</string>
                     </array>
                 </dict>
                 <key>AMActionVersion</key>
@@ -215,11 +283,44 @@ const macosIntegration = {
                 <key>ActionParameters</key>
                 <dict>
                     <key>COMMAND_STRING</key>
-                    <string>for f in "$@"
-do
-    "${filezapPath}" share-ui "$f" &
-    exit 0
-done
+                    <string>#!/bin/bash
+# Simple error handler
+function handle_error() {
+    osascript -e 'display dialog "Error sharing file with FileZap: $1" buttons {"OK"} default button "OK" with icon caution'
+    exit 1
+}
+
+# Ensure we have at least one file
+if [ $# -eq 0 ]; then
+    handle_error "No files selected"
+fi
+
+# Process the first file (Automator passes all files as arguments)
+FILE="$1"
+
+# Check if file exists
+if [ ! -e "$FILE" ]; then
+    handle_error "File not found: $FILE"
+fi
+
+# Try to find FileZap executable
+FILEZAP="${filezapPath}"
+
+# Check if executable exists
+if ! command -v "$FILEZAP" &> /dev/null; then
+    # Try to locate using which
+    FILEZAP=$(which filezap 2>/dev/null || echo "")
+    
+    if [ -z "$FILEZAP" ]; then
+        handle_error "FileZap executable not found"
+    fi
+fi
+
+# Launch FileZap in the background
+"$FILEZAP" share-ui "$FILE" &
+
+# Exit successfully
+exit 0
 </string>
                     <key>CheckedForUserDefaultShell</key>
                     <true/>
@@ -262,83 +363,9 @@ done
                 <array>
                     <string>Automator</string>
                 </array>
-                <key>arguments</key>
-                <dict>
-                    <key>0</key>
-                    <dict>
-                        <key>default value</key>
-                        <string>/bin/sh</string>
-                        <key>name</key>
-                        <string>shell</string>
-                        <key>required</key>
-                        <string>0</string>
-                        <key>type</key>
-                        <string>0</string>
-                        <key>uuid</key>
-                        <string>0</string>
-                    </dict>
-                    <key>1</key>
-                    <dict>
-                        <key>default value</key>
-                        <string></string>
-                        <key>name</key>
-                        <string>COMMAND_STRING</string>
-                        <key>required</key>
-                        <string>0</string>
-                        <key>type</key>
-                        <string>0</string>
-                        <key>uuid</key>
-                        <string>1</string>
-                    </dict>
-                    <key>2</key>
-                    <dict>
-                        <key>default value</key>
-                        <false/>
-                        <key>name</key>
-                        <string>CheckedForUserDefaultShell</string>
-                        <key>required</key>
-                        <string>0</string>
-                        <key>type</key>
-                        <string>0</string>
-                        <key>uuid</key>
-                        <string>2</string>
-                    </dict>
-                    <key>3</key>
-                    <dict>
-                        <key>default value</key>
-                        <string>0</string>
-                        <key>name</key>
-                        <string>inputMethod</string>
-                        <key>required</key>
-                        <string>0</string>
-                        <key>type</key>
-                        <string>0</string>
-                        <key>uuid</key>
-                        <string>3</string>
-                    </dict>
-                    <key>4</key>
-                    <dict>
-                        <key>default value</key>
-                        <string>0</string>
-                        <key>name</key>
-                        <string>source</string>
-                        <key>required</key>
-                        <string>0</string>
-                        <key>type</key>
-                        <string>0</string>
-                        <key>uuid</key>
-                        <string>4</string>
-                    </dict>
-                </dict>
-                <key>isViewVisible</key>
-                <true/>
-                <key>location</key>
-                <string>309.000000:368.000000</string>
-                <key>nibPath</key>
-                <string>/System/Library/Automator/Run Shell Script.action/Contents/Resources/Base.lproj/main.nib</string>
             </dict>
             <key>isViewVisible</key>
-            <true/>
+            <integer>1</integer>
         </dict>
     </array>
     <key>connectors</key>
@@ -373,10 +400,24 @@ done
 </dict>
 </plist>`;
 
-      fs.writeFileSync(infoDir, infoPlist);
-      fs.writeFileSync(documentDir, documentWflow);
+      // Write the files
+      fs.writeFileSync(infoPath, infoPlist);
+      fs.writeFileSync(documentPath, documentWflow);
+      
+      // Set proper permissions
+      spinner.text = 'Setting proper permissions...';
+      try {
+        fs.chmodSync(workflowDir, 0o755);
+        fs.chmodSync(contentsDir, 0o755);
+        fs.chmodSync(infoPath, 0o644);
+        fs.chmodSync(documentPath, 0o644);
+      } catch (permError) {
+        spinner.warn('Could not set permissions properly. Integration may not work correctly.');
+        console.log(chalk.yellow(`Permission error: ${permError.message}`));
+      }
       
       // Refresh macOS services cache
+      spinner.text = 'Refreshing macOS services...';
       try {
         execSync('/System/Library/CoreServices/pbs -flush');
       } catch (e) {
@@ -389,13 +430,25 @@ done
       }
       
       spinner.succeed('macOS Finder integration installed successfully!');
-      console.log(chalk.cyan('\nYou can now right-click on any file and select "Services > Share via CPD"'));
-      console.log(chalk.gray('You may need to restart Finder or log out and back in for changes to take effect'));
+      console.log(chalk.cyan('\nYou can now right-click on any file and select:'));
+      console.log(chalk.cyan('    Services → Share via FileZap'));
+      console.log(chalk.gray('\nYou may need to log out and log back in, or restart your Mac for changes to take effect.'));
+      console.log(chalk.gray('If service does not appear, try running:'));
+      console.log(chalk.gray('    killall -KILL Finder && /System/Library/CoreServices/pbs -flush\n'));
       
       return true;
     } catch (error) {
       spinner.fail(`Failed to install macOS Finder integration: ${error.message}`);
       console.log(chalk.red('\nYou may need to check permissions or try again with admin privileges'));
+      console.log(chalk.yellow('\nTroubleshooting steps:'));
+      console.log('1. Make sure FileZap is properly installed: npm list -g filezap');
+      console.log('2. Try installing manually:');
+      console.log('   - Open Automator.app');
+      console.log('   - Create a new Quick Action');
+      console.log('   - Set "Workflow receives" to "files or folders" in "Finder"');
+      console.log('   - Add a "Run Shell Script" action');
+      console.log(`   - Add command: filezap share-ui "$1" &`);
+      console.log('   - Save as "Share via FileZap"');
       return false;
     }
   },

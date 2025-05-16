@@ -1,6 +1,6 @@
 {
   "name": "filezap",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Fast and secure file sharing across devices and networks",
   "type": "module",
   "main": "./bin/filezap.js",
