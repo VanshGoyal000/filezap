@@ -110,7 +110,7 @@ const macosIntegration = {
     const spinner = ora('Adding macOS Finder context menu integration...').start();
     
     try {
-      const cpdPath = getExecutablePath();
+      const filezapPath = getExecutablePath(); // Changed from cpdPath to filezapPath for consistency
       const servicesDir = path.join(os.homedir(), 'Library', 'Services');
       fs.ensureDirSync(servicesDir);
       
@@ -153,7 +153,7 @@ const macosIntegration = {
 </dict>
 </plist>`;
 
-      // Create document.wflow that opens browser instead of terminal
+      // Create document.wflow that uses the correct filezapPath variable
       const documentWflow = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -217,7 +217,7 @@ const macosIntegration = {
                     <key>COMMAND_STRING</key>
                     <string>for f in "$@"
 do
-    ${filezapPath} share-ui "$f" &
+    "${filezapPath}" share-ui "$f" &
     exit 0
 done
 </string>
