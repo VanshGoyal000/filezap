@@ -161,27 +161,50 @@ export async function receiveFile(serverIp, serverPort, fileName, password = nul
         const percent = Math.floor((receivedSize / totalSize) * 100);
         spinner.text = `Receiving: ${fileName} | ${percent}% complete | ${speedKBps} KB/s`;
         
-        // Write file
-        fs.writeFileSync(finalFilePath, data);
-        spinner.succeed(`File received and saved to: ${finalFilePath}`);
-        
-        // Acknowledge receipt
-        ws.send(JSON.stringify({ 
-          type: 'received',
-          clientName: os.hostname(),
-          savePath: finalFilePath
-        }));
-        
-        console.log('\n' + chalk.green('✓') + ' Transfer successful!');
-        console.log(chalk.cyan('File saved to:') + ' ' + finalFilePath);
-        
-        // Open file option based on platform
-        if (os.platform() === 'win32') {
-          console.log('\nTo open the file: ' + chalk.yellow(`start "${finalFilePath}"`));
-        } else if (os.platform() === 'darwin') {
-          console.log('\nTo open the file: ' + chalk.yellow(`open "${finalFilePath}"`));
-        } else {
-          console.log('\nTo open the file: ' + chalk.yellow(`xdg-open "${finalFilePath}"`));
+        // Write file with error handling
+        try {
+          // Make sure the directory exists
+          const fileDir = path.dirname(finalFilePath);
+          fs.ensureDirSync(fileDir);
+          
+          // Write the file
+          fs.writeFileSync(finalFilePath, data);
+          spinner.succeed(`File received and saved to: ${finalFilePath}`);
+          
+          // Acknowledge receipt
+          ws.send(JSON.stringify({ 
+            type: 'received',
+            clientName: os.hostname(),
+            savePath: finalFilePath
+          }));
+          
+          console.log('\n' + chalk.green('✓') + ' Transfer successful!');
+          console.log(chalk.cyan('File saved to:') + ' ' + finalFilePath);
+          
+          // Open file option based on platform
+          if (os.platform() === 'win32') {
+            console.log('\nTo open the file: ' + chalk.yellow(`start "${finalFilePath}"`));
+          } else if (os.platform() === 'darwin') {
+            console.log('\nTo open the file: ' + chalk.yellow(`open "${finalFilePath}"`));
+          } else {
+            console.log('\nTo open the file: ' + chalk.yellow(`xdg-open "${finalFilePath}"`));
+          }
+        } catch (writeError) {
+          spinner.fail(`Failed to write file: ${writeError.message}`);
+          console.log(chalk.red(`Error: ${writeError.message}`));
+          
+          // Try with a different name if there's a permission issue
+          if (writeError.code === 'EACCES' || writeError.code === 'EPERM') {
+            const altPath = path.join(os.tmpdir(), fileName);
+            try {
+              fs.writeFileSync(altPath, data);
+              spinner.succeed(`File saved to alternate location: ${altPath}`);
+              console.log('\n' + chalk.green('✓') + ' Transfer saved to alternate location due to permissions.');
+              console.log(chalk.cyan('File saved to:') + ' ' + altPath);
+            } catch (altError) {
+              spinner.fail(`Could not save file to alternate location: ${altError.message}`);
+            }
+          }
         }
         
         setTimeout(() => {

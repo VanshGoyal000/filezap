@@ -271,6 +271,14 @@ program
         process.exit(1);
       }
       
+      // Check if path is a directory - prevent directory sharing
+      const stats = fs.statSync(normalizedPath);
+      if (stats.isDirectory()) {
+        console.error(chalk.red(`Error: ${normalizedPath} is a directory. FileZap only supports sharing individual files.`));
+        console.error(chalk.yellow(`Tip: You can compress the directory into a zip file first and then share it.`));
+        process.exit(1);
+      }
+      
       // Start the server in UI mode - hide terminal output but show browser
       const serverOptions = { 
         webOnly: true,       // Hide terminal output

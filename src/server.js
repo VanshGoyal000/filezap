@@ -915,13 +915,45 @@ export async function startFileServer(filePath, options = {}) {
           `);
           res.end();
         } else {
-          res.writeHead(200, {
-            'Content-Disposition': `attachment; filename="${fileName}"`,
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': fileSize
-          });
-          const fileStream = fs.createReadStream(filePath);
-          fileStream.pipe(res);
+          // Check if the path is a directory before attempting to read it
+          try {
+            const stats = fs.statSync(filePath);
+            
+            if (stats.isDirectory()) {
+              // Handle directory download request - return an error
+              res.writeHead(400, {'Content-Type': 'text/html'});
+              res.write(`
+                <html><body>
+                  <h1>Cannot Download Directory</h1>
+                  <p>The selected path is a directory, not a file. Directories cannot be downloaded directly.</p>
+                  <p><a href="/">Go back</a></p>
+                </body></html>
+              `);
+              res.end();
+              return;
+            }
+            
+            // Only proceed if it's actually a file
+            res.writeHead(200, {
+              'Content-Disposition': `attachment; filename="${fileName}"`,
+              'Content-Type': 'application/octet-stream',
+              'Content-Length': fileSize
+            });
+            const fileStream = fs.createReadStream(filePath);
+            fileStream.pipe(res);
+          } catch (error) {
+            // Handle any file system errors
+            logDebug(`Error accessing file for download: ${error.message}`);
+            res.writeHead(500, {'Content-Type': 'text/html'});
+            res.write(`
+              <html><body>
+                <h1>Error Accessing File</h1>
+                <p>There was a problem accessing the requested file: ${error.message}</p>
+                <p><a href="/">Go back</a></p>
+              </body></html>
+            `);
+            res.end();
+          }
         }
       } else {
         res.writeHead(404);
