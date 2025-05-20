@@ -11,11 +11,26 @@ const getExecutablePath = () => {
   // On Windows, use the installed location or the current file location
   if (os.platform() === 'win32') {
     try {
+      // First check if we need to ensure Node.js runs the command
+      const isJsFile = true; // Assume it's a JS file by default
+      
       // First check global npm installs
       const npmGlobal = execSync('npm root -g').toString().trim();
-      const possiblePath = path.join(npmGlobal, '..', 'cpd.cmd');
+      const possiblePath = path.join(npmGlobal, '..', 'filezap.cmd');
       if (fs.existsSync(possiblePath)) {
-        return possiblePath;
+        return { path: possiblePath, isJsFile: false }; // .cmd file is executable directly
+      }
+      
+      // Also check for cpd.cmd
+      const cpdPath = path.join(npmGlobal, '..', 'cpd.cmd');
+      if (fs.existsSync(cpdPath)) {
+        return { path: cpdPath, isJsFile: false }; // .cmd file is executable directly
+      }
+      
+      // Check for node_modules filezap.js
+      const jsPath = path.join(npmGlobal, 'filezap', 'bin', 'filezap.js');
+      if (fs.existsSync(jsPath)) {
+        return { path: jsPath, isJsFile: true }; // .js file needs node
       }
     } catch (e) {
       // Ignore error if npm not found
@@ -23,7 +38,7 @@ const getExecutablePath = () => {
     
     // Fallback to current directory executable
     const currentDir = path.resolve(process.cwd());
-    return path.join(currentDir, 'bin', 'cpd.js');
+    return { path: path.join(currentDir, 'bin', 'filezap.js'), isJsFile: true };
   }
   
   // On macOS, be more specific about where to find the executable
@@ -73,9 +88,68 @@ const windowsIntegration = {
     const spinner = ora('Adding Windows Explorer context menu integration...').start();
     
     try {
-      const filezapPath = getExecutablePath();
+      // Get the path and whether it's a JS file
+      const { path: filezapPath, isJsFile } = getExecutablePath();
       
-      // Use a more direct approach with vbscript to avoid PowerShell window showing at all
+      spinner.text = `Using FileZap at: ${filezapPath}`;
+      
+      // Find Node.js executable path if needed
+      let nodePath = '';
+      if (isJsFile) {
+        try {
+          nodePath = execSync('where node').toString().split('\n')[0].trim();
+          spinner.text = `Using Node.js at: ${nodePath}`;
+        } catch (e) {
+          spinner.warn('Could not find Node.js. Will try to use the system default.');
+          nodePath = 'node'; // Hope it's in PATH
+        }
+      }
+      
+      // Create a batch script to handle the execution properly
+      const batchDir = path.join(os.tmpdir(), 'filezap-launcher');
+      fs.ensureDirSync(batchDir);
+      
+      const batchPath = path.join(batchDir, 'filezap-launcher.bat');
+      
+      // The batch file will handle proper execution with error handling
+      const batchContent = isJsFile ? 
+        `@echo off
+rem FileZap Launcher Script
+if not exist "${filezapPath.replace(/\\/g, '\\\\')}" (
+  echo FileZap executable not found: ${filezapPath.replace(/\\/g, '\\\\')}
+  echo Please reinstall FileZap or run 'npm install -g filezap'
+  pause
+  exit /b 1
+)
+
+"${nodePath}" "${filezapPath.replace(/\\/g, '\\\\')}" share-ui %1
+if errorlevel 1 (
+  echo Error launching FileZap. Please check your installation.
+  pause
+)
+` :
+        `@echo off
+rem FileZap Launcher Script
+if not exist "${filezapPath.replace(/\\/g, '\\\\')}" (
+  echo FileZap executable not found: ${filezapPath.replace(/\\/g, '\\\\')}
+  echo Please reinstall FileZap or run 'npm install -g filezap'
+  pause
+  exit /b 1
+)
+
+"${filezapPath.replace(/\\/g, '\\\\')}" share-ui %1
+if errorlevel 1 (
+  echo Error launching FileZap. Please check your installation.
+  pause
+)
+`;
+
+      fs.writeFileSync(batchPath, batchContent);
+      
+      // Set the batch file to be executable
+      fs.chmodSync(batchPath, 0o755);
+      
+      // Use a simpler, more reliable registry entry that uses the batch file
       const registryContent = `Windows Registry Editor Version 5.00
 
 ; FileZap Share menu for files
@@ -84,7 +158,7 @@ const windowsIntegration = {
 "Icon"="%SystemRoot%\\System32\\shell32.dll,133"
 
 [HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\FileZapShare\\command]
-@="wscript.exe //nologo //e:vbscript \\"Dim shell\\nSet shell = CreateObject(\\\\\\"WScript.Shell\\\\\\")\\nshell.Run \\\\\\""${filezapPath.replace(/\\/g, '\\\\')}"\\\\\\" share-ui \\\\\\""\\"%1\\"\\\\\\"\\", 0, false\\n\\""
+@="\\"${batchPath.replace(/\\/g, '\\\\')}\\\" \\"%1\\""
 
 ; FileZap Share menu for folders
 [HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\FileZapShare]
@@ -92,7 +166,7 @@ const windowsIntegration = {
 "Icon"="%SystemRoot%\\System32\\shell32.dll,133"
 
 [HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\FileZapShare\\command]
-@="wscript.exe //nologo //e:vbscript \\"Dim shell\\nSet shell = CreateObject(\\\\\\"WScript.Shell\\\\\\")\\nshell.Run \\\\\\""${filezapPath.replace(/\\/g, '\\\\')}"\\\\\\" share-ui \\\\\\""\\"%1\\"\\\\\\"\\", 0, false\\n\\""
+@="\\"${batchPath.replace(/\\/g, '\\\\')}\\\" \\"%1\\""
 `;
 
       // Write registry file
